@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片库可视化编辑器 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .dragging { opacity: 0.5; transform: scale(0.95); }
+        .drag-over { border: 2px dashed #3b82f6; background: rgba(59, 130, 246, 0.15); }
+        .drag-over-replace { border: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.15); }
+        
+        .image-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .image-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+        
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        .stat-card { transition: all 0.3s ease; cursor: pointer; }
+        .stat-card:hover { transform: translateY(-2px); border-color: rgba(59, 130, 246, 0.5); }
+        
+        .drop-zone { border: 2px dashed #475569; transition: all 0.3s ease; }
+        .drop-zone.drag-over { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+
+        .path-text { font-family: 'Monaco', 'Consolas', monospace; font-size: 0.75rem; }
+        
+        .link-item { transition: all 0.2s; }
+        .link-item:hover { background: rgba(59, 130, 246, 0.1); border-left-color: #3b82f6; }
+    </style>
+</head>
+<body class="min-h-screen overflow-x-hidden">
+
+    <!-- 顶部导航 -->
+    <header class="fixed top-0 w-full z-50 glass border-b border-slate-700/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </div>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Image Gallery Editor Pro</h1>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button onclick="app.showAddModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/25">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    添加图片
+                </button>
+                <button onclick="app.exportJSON()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 border border-slate-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    复制JSON
+                </button>
+                <button onclick="app.downloadJSON()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-lg shadow-blue-500/25">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    下载文件
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+        
+        <!-- 统计信息面板 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="stat-card glass rounded-xl p-4 border border-slate-700/50 relative group" onclick="app.editTotalCount()">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-slate-400 text-sm">总图片数</span>
+                    <svg class="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </div>
+                <div class="text-2xl font-bold text-white" id="totalCountDisplay">0</div>
+                <div class="text-xs text-slate-500 mt-1">点击编辑 (自动填充空项)</div>
+                
+                <div id="totalCountEdit" class="hidden absolute inset-0 bg-slate-800 rounded-xl p-4 flex flex-col justify-center">
+                    <label class="text-xs text-slate-400 mb-1">设置总数量 (不能小于当前)</label>
+                    <input type="number" id="totalCountInput" class="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-lg font-bold mb-2" onkeypress="if(event.key==='Enter') app.saveTotalCount()">
+                    <div class="flex gap-2">
+                        <button onclick="event.stopPropagation(); app.saveTotalCount()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-xs py-1 rounded">确定</button>
+                        <button onclick="event.stopPropagation(); app.cancelTotalCountEdit()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-xs py-1 rounded">取消</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card glass rounded-xl p-4 border border-slate-700/50 relative group" onclick="app.editCategories()">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-slate-400 text-sm">分类管理</span>
+                    <svg class="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </div>
+                <div class="text-2xl font-bold text-blue-400" id="categoryCountDisplay">0</div>
+                <div class="text-xs text-slate-500 mt-1">点击管理分类</div>
+            </div>
+
+            <div class="stat-card glass rounded-xl p-4 border border-slate-700/50 relative group" onclick="app.showLinkOverview('local')">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-slate-400 text-sm">本地资源</span>
+                    <svg class="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </div>
+                <div class="text-2xl font-bold text-purple-400" id="localCount">0</div>
+                <div class="text-xs text-slate-500 mt-1">点击查看路径列表</div>
+            </div>
+
+            <div class="stat-card glass rounded-xl p-4 border border-slate-700/50 relative group" onclick="app.showLinkOverview('external')">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-slate-400 text-sm">外部链接</span>
+                    <svg class="w-4 h-4 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </div>
+                <div class="text-2xl font-bold text-emerald-400" id="externalCount">0</div>
+                <div class="text-xs text-slate-500 mt-1">点击查看链接列表</div>
+            </div>
+        </div>
+
+        <!-- 工具栏 -->
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div class="flex items-center gap-2">
+                <span class="text-slate-400 text-sm">排序方式:</span>
+                <select id="sortSelect" onchange="app.handleSort()" class="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="custom">自定义拖拽排序</option>
+                    <option value="date-desc">日期 (最新优先)</option>
+                    <option value="date-asc">日期 (最早优先)</option>
+                    <option value="title">标题 (A-Z)</option>
+                    <option value="category">分类</option>
+                </select>
+            </div>
+            
+            <div class="flex items-center gap-4 text-sm text-slate-400">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>拖入空白处: 添加</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>拖入图片上: 替换</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 图片网格 -->
+        <div id="galleryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+            <!-- 动态生成 -->
+        </div>
+
+        <!-- 底部拖放区域 -->
+        <div id="bottomDropZone" class="drop-zone rounded-xl border-2 border-dashed border-slate-600 p-8 text-center text-slate-500 transition-all hover:border-slate-500 hover:bg-slate-800/50">
+            <svg class="w-12 h-12 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <p class="text-lg font-medium mb-1">拖放图片到此处添加</p>
+            <p class="text-sm">支持从资源管理器拖拽图片文件，自动记录文件路径</p>
+        </div>
+
+        <!-- 空状态 -->
+        <div id="emptyState" class="hidden text-center py-20">
+            <div class="w-24 h-24 mx-auto mb-4 text-slate-600">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+            <p class="text-slate-400 mb-4">暂无图片数据</p>
+            <button onclick="app.showAddModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors">
+                添加第一张图片
+            </button>
+        </div>
+    </main>
+
+    <!-- 链接总览模态框 -->
+    <div id="linkOverviewModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="app.closeLinkOverview()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="glass rounded-2xl border border-slate-600 w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
+                <div class="p-6 border-b border-slate-700 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white" id="linkOverviewTitle">链接总览</h2>
+                        <p class="text-sm text-slate-400 mt-1" id="linkOverviewSubtitle">查看所有资源路径</p>
+                    </div>
+                    <button onclick="app.closeLinkOverview()" class="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto p-6">
+                    <div id="linkList" class="space-y-2">
+                        <!-- 动态生成链接列表 -->
+                    </div>
+                </div>
+
+                <div class="p-4 border-t border-slate-700 bg-slate-800/50 rounded-b-2xl">
+                    <div class="flex justify-between items-center text-sm text-slate-400">
+                        <span id="linkTotalCount">共 0 项</span>
+                        <button onclick="app.copyAllLinks()" class="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors text-xs font-medium border border-blue-600/30">
+                            复制全部路径
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加图片模态框 -->
+    <div id="addModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="app.closeAddModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="glass rounded-2xl border border-slate-600 w-full max-w-lg p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-white">添加新图片</h2>
+                    <button onclick="app.closeAddModal()" class="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">图片URL或本地路径 <span class="text-red-400">*</span></label>
+                        <div class="flex gap-2">
+                            <input type="text" id="addUrl" placeholder="https://example.com/image.jpg 或 resources/image.png" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                            <button onclick="app.browseFile()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm whitespace-nowrap">浏览...</button>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="app.handleFileSelect(event)">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">标题 <span class="text-red-400">*</span></label>
+                        <input type="text" id="addTitle" placeholder="输入图片标题" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">分类</label>
+                            <select id="addCategory" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">日期</label>
+                            <input type="date" id="addDate" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">描述</label>
+                        <textarea id="addDescription" rows="2" placeholder="输入图片描述（可选）" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">宽度 (px)</label>
+                            <input type="number" id="addWidth" placeholder="0" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">高度 (px)</label>
+                            <input type="number" id="addHeight" placeholder="0" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">标签 (用逗号分隔)</label>
+                        <input type="text" id="addTags" placeholder="tag1, tag2, tag3" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button onclick="app.saveNewImage()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg font-medium transition-colors shadow-lg shadow-emerald-500/25">
+                        添加图片
+                    </button>
+                    <button onclick="app.closeAddModal()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">
+                        取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分类管理模态框 -->
+    <div id="categoryModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="app.closeCategoryModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="glass rounded-2xl border border-slate-600 w-full max-w-md p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-white">管理分类</h2>
+                    <button onclick="app.closeCategoryModal()" class="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="newCategory" placeholder="新分类名称" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none" onkeypress="if(event.key==='Enter') app.addCategory()">
+                        <button onclick="app.addCategory()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">添加</button>
+                    </div>
+                </div>
+
+                <div id="categoryList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+
+                <div class="mt-6 pt-4 border-t border-slate-700">
+                    <p class="text-xs text-slate-500 mb-3">提示：删除分类不会影响已归类图片，它们将保留原分类名称。</p>
+                    <button onclick="app.closeCategoryModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg font-medium transition-colors">
+                        完成
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑侧边栏 -->
+    <div id="editPanel" class="fixed inset-y-0 right-0 w-full md:w-[480px] glass border-l border-slate-700/50 transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold text-white">编辑图片信息</h2>
+                <button onclick="app.closeEdit()" class="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div id="editForm" class="space-y-6">
+                <div class="aspect-video bg-slate-800 rounded-lg overflow-hidden border border-slate-700 relative group">
+                    <img id="editPreview" src="" alt="Preview" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span class="text-white text-sm">当前图片预览</span>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">标题</label>
+                        <input type="text" id="editTitle" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">分类</label>
+                            <select id="editCategory" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"></select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">日期</label>
+                            <input type="date" id="editDate" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">描述</label>
+                        <textarea id="editDescription" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">图片URL</label>
+                        <input type="text" id="editUrl" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">宽度 (px)</label>
+                            <input type="number" id="editWidth" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">高度 (px)</label>
+                            <input type="number" id="editHeight" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">标签</label>
+                        <div id="editTags" class="flex flex-wrap gap-2 mb-2"></div>
+                        <div class="flex gap-2">
+                            <input type="text" id="newTag" placeholder="添加标签..." class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" onkeypress="if(event.key==='Enter') app.addTag()">
+                            <button onclick="app.addTag()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors">添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4 border-t border-slate-700">
+                    <button onclick="app.saveEdit()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/25">
+                        保存更改
+                    </button>
+                    <button onclick="app.deleteImage()" class="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50 rounded-lg font-medium transition-colors">
+                        删除
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遮罩层 -->
+    <div id="overlay" onclick="app.closeEdit()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 hidden opacity-0 transition-opacity duration-300"></div>
+
+    <!-- 提示消息 -->
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <div class="glass px-6 py-3 rounded-lg border border-slate-600 shadow-2xl flex items-center gap-3">
+            <div id="toastIcon"></div>
+            <span id="toastMessage" class="text-white font-medium"></span>
+        </div>
+    </div>
+
+    <script>
+        const initialData = {
+            "images": [
+                {
+                    "id": 1,
+                    "title": "3D_魔法师",
+                    "url": "resources/3D_魔法师.gif",
+                    "category": "3D_art",
+                    "date": "2020-2-2",
+                    "description": "",
+                    "tags": [],
+                    "width": 0,
+                    "height": 0
+                },
+                {
+                    "id": 2,
+                    "title": "Cyberpunk Portrait",
+                    "url": "resources/illustration2.png",
+                    "category": "Sci-Fi",
+                    "date": "2024-10-02",
+                    "description": "A futuristic character portrait showcasing cybernetic enhancements and neon-lit urban aesthetics.",
+                    "tags": ["cyberpunk", "portrait", "sci-fi", "character design"],
+                    "width": 1024,
+                    "height": 1536
+                },
+                {
+                    "id": 3,
+                    "title": "Art Nouveau Elegance",
+                    "url": "resources/illustration3.png",
+                    "category": "Classical",
+                    "date": "2024-08-20",
+                    "description": "An elegant interpretation of Art Nouveau style with flowing organic forms and decorative elements.",
+                    "tags": ["art nouveau", "classical", "elegant", "decorative"],
+                    "width": 1024,
+                    "height": 1536
+                },
+                {
+                    "id": 4,
+                    "title": "Surreal Underwater Temple",
+                    "url": "resources/illustration4.png",
+                    "category": "Surreal",
+                    "date": "2024-09-28",
+                    "description": "A dreamlike underwater scene featuring a submerged ancient temple and mythological elements.",
+                    "tags": ["surreal", "underwater", "mythology", "dreamlike"],
+                    "width": 1024,
+                    "height": 1536
+                },
+                {
+                    "id": 5,
+                    "title": "Liquid Metal Abstract",
+                    "url": "resources/illustration5.png",
+                    "category": "Abstract",
+                    "date": "2024-10-05",
+                    "description": "Contemporary abstract composition exploring the fluidity of metallic forms and geometric patterns.",
+                    "tags": ["abstract", "contemporary", "metallic", "geometric"],
+                    "width": 1024,
+                    "height": 1536
+                },
+                {
+                    "id": 6,
+                    "title": "Digital Portrait Study",
+                    "url": "https://kimi-web-img.moonshot.cn/img/cms-assets.tutsplus.com/8bdf371c027cca0d6bcf6ce5cd187a095088f11f.png",
+                    "category": "Portrait",
+                    "date": "2024-07-15",
+                    "description": "A detailed digital portrait study exploring light and shadow in human features.",
+                    "tags": ["portrait", "study", "digital painting", "realistic"],
+                    "width": 800,
+                    "height": 1200
+                },
+                {
+                    "id": 7,
+                    "title": "Fantasy Creature Design",
+                    "url": "https://kimi-web-img.moonshot.cn/img/blog.spoongraphics.co.uk/d797915b42fe167fe9a437240ad2caba003f3fd9.jpg",
+                    "category": "Fantasy",
+                    "date": "2024-08-10",
+                    "description": "Original fantasy creature design with intricate details and mythical characteristics.",
+                    "tags": ["fantasy", "creature design", "mythical", "original"],
+                    "width": 1200,
+                    "height": 900
+                },
+                {
+                    "id": 8,
+                    "title": "Surreal Landscape",
+                    "url": "https://kimi-web-img.moonshot.cn/img/webneel.com/e9e4914a580b4cb9ef6ab2aacda3f7b175dda040.jpg",
+                    "category": "Surreal",
+                    "date": "2024-09-05",
+                    "description": "A surreal landscape that challenges perception and reality through dreamlike imagery.",
+                    "tags": ["surreal", "landscape", "dreamlike", "conceptual"],
+                    "width": 1000,
+                    "height": 1400
+                },
+                {
+                    "id": 9,
+                    "title": "Modern Digital Landscape",
+                    "url": "https://kimi-web-img.moonshot.cn/img/img.freepik.com/1fe133c6fe1c29e20bce31db307ea8e4189f79f3.jpg",
+                    "category": "Landscape",
+                    "date": "2024-07-28",
+                    "description": "Contemporary digital landscape painting with vibrant colors and atmospheric perspective.",
+                    "tags": ["landscape", "digital painting", "modern", "atmospheric"],
+                    "width": 1200,
+                    "height": 800
+                },
+                {
+                    "id": 10,
+                    "title": "Anime Style Illustration",
+                    "url": "https://kimi-web-img.moonshot.cn/img/www.clipstudio.net/f8ea414d2574c679db4850ef230f44b3fbb51b17.jpg",
+                    "category": "Anime",
+                    "date": "2024-08-15",
+                    "description": "Dynamic anime-style character illustration with expressive poses and vibrant colors.",
+                    "tags": ["anime", "character", "dynamic", "colorful"],
+                    "width": 900,
+                    "height": 1300
+                },
+                {
+                    "id": 11,
+                    "title": "Cyberpunk Cityscape",
+                    "url": "https://kimi-web-img.moonshot.cn/img/static.wikia.nocookie.net/10b06b06a0a1ee3b44073160bcc7af83d9885b33",
+                    "category": "Sci-Fi",
+                    "date": "2024-09-20",
+                    "description": "Futuristic cyberpunk cityscape with neon lights and advanced technology elements.",
+                    "tags": ["cyberpunk", "cityscape", "futuristic", "neon"],
+                    "width": 1200,
+                    "height": 800
+                },
+                {
+                    "id": 12,
+                    "title": "Watercolor Digital Art",
+                    "url": "https://kimi-web-img.moonshot.cn/img/i.ytimg.com/73af0b00589ef0fc4c8834726178c30148073c77.jpg",
+                    "category": "Traditional",
+                    "date": "2024-07-22",
+                    "description": "Digital artwork inspired by traditional watercolor techniques with flowing, organic forms.",
+                    "tags": ["watercolor", "traditional", "organic", "flowing"],
+                    "width": 1000,
+                    "height": 1200
+                },
+                {
+                    "id": 13,
+                    "title": "Character Design Study",
+                    "url": "https://kimi-web-img.moonshot.cn/img/i.ytimg.com/8723ec58ea9683c58aff8ad0020084b7c3d01067.jpg",
+                    "category": "Character",
+                    "date": "2024-08-05",
+                    "description": "Detailed character design study focusing on anatomy, expression, and personality.",
+                    "tags": ["character design", "study", "anatomy", "expression"],
+                    "width": 800,
+                    "height": 1100
+                },
+                {
+                    "id": 14,
+                    "title": "Contemporary Digital Art",
+                    "url": "https://kimi-web-img.moonshot.cn/img/marionevado.art/e0e230c14b4046f16ff0ee9ab8676c8211b6a570.jpg",
+                    "category": "Contemporary",
+                    "date": "2024-09-12",
+                    "description": "Contemporary digital artwork exploring themes of identity and technology.",
+                    "tags": ["contemporary", "identity", "technology", "conceptual"],
+                    "width": 1100,
+                    "height": 1400
+                },
+                {
+                    "id": 15,
+                    "title": "Digital Art Portrait",
+                    "url": "https://kimi-web-img.moonshot.cn/img/www.whataportrait.com/272693e80a7b7fe94bb7ebbb36a2ac00b9d78231.png",
+                    "category": "Portrait",
+                    "date": "2024-08-30",
+                    "description": "Stylized digital portrait with emphasis on color harmony and emotional expression.",
+                    "tags": ["portrait", "stylized", "color harmony", "emotional"],
+                    "width": 900,
+                    "height": 1200
+                },
+                {
+                    "id": 16,
+                    "title": "Ani_Shot_Reaction",
+                    "url": "resources/ani_reaction.gif",
+                    "category": "Ani",
+                    "date": "2020-2-2",
+                    "description": "description",
+                    "tags": [],
+                    "width": 2000,
+                    "height": 2000
+                }
+            ],
+            "categories": ["All", "2D_art", "3D_art", "Ani"],
+            "totalImages": 17,
+            "loadMoreCount": 30
+        };
+
+        class GalleryEditor {
+            constructor() {
+                this.data = JSON.parse(JSON.stringify(initialData));
+                this.currentEditId = null;
+                this.draggedItem = null;
+                this.nextId = Math.max(...this.data.images.map(i => i.id)) + 1;
+                this.currentLinkType = null;
+                this.init();
+            }
+
+            init() {
+                this.updateStats();
+                this.renderGallery();
+                this.setupDragAndDrop();
+                this.setupFileDrop();
+                this.updateCategoryOptions();
+            }
+
+            updateStats() {
+                document.getElementById('totalCountDisplay').textContent = this.data.images.length;
+                document.getElementById('categoryCountDisplay').textContent = this.data.categories.length - 1;
+                
+                const localCount = this.data.images.filter(img => !img.url.startsWith('http')).length;
+                document.getElementById('localCount').textContent = localCount;
+                document.getElementById('externalCount').textContent = this.data.images.length - localCount;
+            }
+
+            // 链接总览功能
+            showLinkOverview(type) {
+                this.currentLinkType = type;
+                const isLocal = type === 'local';
+                const filteredImages = this.data.images.filter(img => 
+                    isLocal ? !img.url.startsWith('http') : img.url.startsWith('http')
+                );
+
+                document.getElementById('linkOverviewTitle').textContent = isLocal ? '本地资源路径' : '外部链接列表';
+                document.getElementById('linkOverviewSubtitle').textContent = 
+                    isLocal ? `共 ${filteredImages.length} 个本地文件` : `共 ${filteredImages.length} 个外部链接`;
+                document.getElementById('linkTotalCount').textContent = `共 ${filteredImages.length} 项`;
+
+                const listContainer = document.getElementById('linkList');
+                
+                if (filteredImages.length === 0) {
+                    listContainer.innerHTML = `
+                        <div class="text-center py-8 text-slate-500">
+                            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <p>暂无${isLocal ? '本地资源' : '外部链接'}</p>
+                        </div>
+                    `;
+                } else {
+                    listContainer.innerHTML = filteredImages.map((img, idx) => `
+                        <div class="link-item flex items-start gap-3 p-3 bg-slate-800/30 border-l-2 border-slate-600 rounded-r-lg cursor-pointer" onclick="app.jumpToImage(${img.id})">
+                            <div class="w-10 h-10 rounded bg-slate-700 flex-shrink-0 overflow-hidden">
+                                ${img.url ? `<img src="${img.url}" class="w-full h-full object-cover" onerror="this.style.display='none'">` : ''}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-medium text-white truncate">${img.title}</span>
+                                    <span class="text-xs text-slate-500">#${img.id}</span>
+                                </div>
+                                <div class="path-text text-slate-400 truncate hover:text-blue-400 transition-colors" title="${img.url}">
+                                    ${img.url || '无路径'}
+                                </div>
+                                <div class="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                    <span>${img.category}</span>
+                                    <span>•</span>
+                                    <span>${img.date}</span>
+                                </div>
+                            </div>
+                            <button onclick="event.stopPropagation(); app.copyLink('${img.url.replace(/'/g, "\\'")}')" class="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors" title="复制路径">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            </button>
+                        </div>
+                    `).join('');
+                }
+
+                document.getElementById('linkOverviewModal').classList.remove('hidden');
+            }
+
+            closeLinkOverview() {
+                document.getElementById('linkOverviewModal').classList.add('hidden');
+                this.currentLinkType = null;
+            }
+
+            jumpToImage(id) {
+                this.closeLinkOverview();
+                const element = document.querySelector(`[data-id="${id}"]`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.classList.add('ring-2', 'ring-blue-500');
+                    setTimeout(() => element.classList.remove('ring-2', 'ring-blue-500'), 2000);
+                }
+            }
+
+            copyLink(url) {
+                navigator.clipboard.writeText(url).then(() => {
+                    this.showToast('路径已复制', 'success');
+                });
+            }
+
+            copyAllLinks() {
+                const isLocal = this.currentLinkType === 'local';
+                const links = this.data.images
+                    .filter(img => isLocal ? !img.url.startsWith('http') : img.url.startsWith('http'))
+                    .map(img => img.url)
+                    .join('\n');
+                
+                navigator.clipboard.writeText(links).then(() => {
+                    this.showToast('全部路径已复制', 'success');
+                });
+            }
+
+            // 其他原有功能...
+            editTotalCount() {
+                const editDiv = document.getElementById('totalCountEdit');
+                const input = document.getElementById('totalCountInput');
+                editDiv.classList.remove('hidden');
+                input.value = this.data.images.length;
+                input.min = this.data.images.length;
+                input.focus();
+            }
+
+            saveTotalCount() {
+                const input = document.getElementById('totalCountInput');
+                const newCount = parseInt(input.value);
+                const currentCount = this.data.images.length;
+                
+                if (newCount < currentCount) {
+                    this.showToast(`不能小于当前图片数 (${currentCount})`, 'error');
+                    return;
+                }
+                
+                if (newCount > currentCount) {
+                    for (let i = currentCount; i < newCount; i++) {
+                        this.data.images.push({
+                            "id": this.nextId++,
+                            "title": `未命名图片 ${i + 1}`,
+                            "url": "",
+                            "category": this.data.categories[1] || "Uncategorized",
+                            "date": new Date().toISOString().split('T')[0],
+                            "description": "",
+                            "tags": [],
+                            "width": 0,
+                            "height": 0
+                        });
+                    }
+                    this.renderGallery();
+                    this.updateStats();
+                    this.showToast(`已自动添加 ${newCount - currentCount} 个空项`, 'success');
+                }
+                
+                this.cancelTotalCountEdit();
+            }
+
+            cancelTotalCountEdit() {
+                document.getElementById('totalCountEdit').classList.add('hidden');
+            }
+
+            editCategories() {
+                this.renderCategoryList();
+                document.getElementById('categoryModal').classList.remove('hidden');
+            }
+
+            closeCategoryModal() {
+                document.getElementById('categoryModal').classList.add('hidden');
+            }
+
+            renderCategoryList() {
+                const list = document.getElementById('categoryList');
+                const categories = this.data.categories.filter(c => c !== 'All');
+                
+                list.innerHTML = categories.map((cat, idx) => `
+                    <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <span class="text-white">${cat}</span>
+                        <button onclick="app.removeCategory(${idx})" class="p-1 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `).join('');
+            }
+
+            addCategory() {
+                const input = document.getElementById('newCategory');
+                const value = input.value.trim();
+                if (!value) return;
+                
+                if (this.data.categories.includes(value)) {
+                    this.showToast('分类已存在', 'error');
+                    return;
+                }
+                
+                this.data.categories.push(value);
+                input.value = '';
+                this.renderCategoryList();
+                this.updateCategoryOptions();
+                this.updateStats();
+                this.showToast('分类已添加', 'success');
+            }
+
+            removeCategory(index) {
+                this.data.categories.splice(index + 1, 1);
+                this.renderCategoryList();
+                this.updateCategoryOptions();
+                this.updateStats();
+            }
+
+            updateCategoryOptions() {
+                const categories = this.data.categories.filter(c => c !== 'All');
+                const options = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+                
+                ['addCategory', 'editCategory'].forEach(id => {
+                    const select = document.getElementById(id);
+                    if (select) select.innerHTML = options;
+                });
+            }
+
+            showAddModal() {
+                document.getElementById('addModal').classList.remove('hidden');
+                document.getElementById('addDate').value = new Date().toISOString().split('T')[0];
+                this.updateCategoryOptions();
+            }
+
+            closeAddModal() {
+                document.getElementById('addModal').classList.add('hidden');
+                ['addUrl', 'addTitle', 'addDescription', 'addWidth', 'addHeight', 'addTags'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+            }
+
+            browseFile() {
+                document.getElementById('fileInput').click();
+            }
+
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    // 使用 File API 获取完整路径（浏览器限制，只显示文件名）
+                    const fileName = file.name;
+                    // 模拟路径：resources/文件名
+                    const path = `resources/${fileName}`;
+                    
+                    document.getElementById('addUrl').value = path;
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        document.getElementById('addWidth').value = img.width;
+                        document.getElementById('addHeight').value = img.height;
+                    };
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                    
+                    if (!document.getElementById('addTitle').value) {
+                        document.getElementById('addTitle').value = fileName.replace(/\.[^/.]+$/, "");
+                    }
+                    
+                    // 显示文件路径提示
+                    this.showToast(`文件路径: ${path}`, 'success');
+                }
+            }
+
+            saveNewImage() {
+                const url = document.getElementById('addUrl').value.trim();
+                const title = document.getElementById('addTitle').value.trim();
+                
+                if (!url || !title) {
+                    this.showToast('请填写URL和标题', 'error');
+                    return;
+                }
+
+                const tagsStr = document.getElementById('addTags').value;
+                const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
+
+                const newImage = {
+                    "id": this.nextId++,
+                    "title": title,
+                    "url": url,
+                    "category": document.getElementById('addCategory').value,
+                    "date": document.getElementById('addDate').value || new Date().toISOString().split('T')[0],
+                    "description": document.getElementById('addDescription').value,
+                    "tags": tags,
+                    "width": parseInt(document.getElementById('addWidth').value) || 0,
+                    "height": parseInt(document.getElementById('addHeight').value) || 0
+                };
+
+                this.data.images.push(newImage);
+                this.renderGallery();
+                this.updateStats();
+                this.closeAddModal();
+                this.showToast('图片已添加', 'success');
+                
+                setTimeout(() => {
+                    const cards = document.querySelectorAll('.image-card');
+                    if (cards.length > 0) {
+                        cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+            }
+
+            setupFileDrop() {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    document.body.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                const bottomZone = document.getElementById('bottomDropZone');
+                
+                bottomZone.addEventListener('dragenter', () => bottomZone.classList.add('drag-over'));
+                bottomZone.addEventListener('dragleave', () => bottomZone.classList.remove('drag-over'));
+                bottomZone.addEventListener('drop', (e) => {
+                    bottomZone.classList.remove('drag-over');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) this.handleDroppedFile(files[0], 'add');
+                });
+
+                this.setupCardFileDrop();
+            }
+
+            setupCardFileDrop() {
+                const cards = document.querySelectorAll('.image-card');
+                cards.forEach(card => {
+                    card.addEventListener('dragenter', (e) => {
+                        if (e.dataTransfer.types.includes('Files')) {
+                            e.preventDefault();
+                            card.classList.add('drag-over-replace');
+                        }
+                    });
+                    
+                    card.addEventListener('dragover', (e) => {
+                        if (e.dataTransfer.types.includes('Files')) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'copy';
+                        }
+                    });
+                    
+                    card.addEventListener('dragleave', () => card.classList.remove('drag-over-replace'));
+                    
+                    card.addEventListener('drop', (e) => {
+                        card.classList.remove('drag-over-replace');
+                        const files = e.dataTransfer.files;
+                        if (files.length > 0) {
+                            e.stopPropagation();
+                            const id = parseInt(card.dataset.id);
+                            this.handleDroppedFile(files[0], 'replace', id);
+                        }
+                    });
+                });
+            }
+
+            handleDroppedFile(file, mode, targetId = null) {
+                if (!file.type.startsWith('image/')) {
+                    this.showToast('请拖入图片文件', 'error');
+                    return;
+                }
+
+                // 使用相对路径格式 resources/文件名
+                const fileName = file.name;
+                const resourcePath = `resources/${fileName}`;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        if (mode === 'add') {
+                            const newImage = {
+                                "id": this.nextId++,
+                                "title": fileName.replace(/\.[^/.]+$/, ""),
+                                "url": resourcePath,
+                                "category": this.data.categories[1] || "Uncategorized",
+                                "date": new Date().toISOString().split('T')[0],
+                                "description": "",
+                                "tags": [],
+                                "width": img.width,
+                                "height": img.height
+                            };
+                            this.data.images.push(newImage);
+                            this.renderGallery();
+                            this.updateStats();
+                            this.showToast(`已添加: ${resourcePath}`, 'success');
+                        } else if (mode === 'replace' && targetId) {
+                            const image = this.data.images.find(i => i.id === targetId);
+                            if (image) {
+                                image.url = resourcePath;
+                                image.width = img.width;
+                                image.height = img.height;
+                                if (image.title.startsWith('未命名') || image.title === '') {
+                                    image.title = fileName.replace(/\.[^/.]+$/, "");
+                                }
+                                this.renderGallery();
+                                this.showToast(`已替换为: ${resourcePath}`, 'success');
+                            }
+                        }
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            renderGallery() {
+                const grid = document.getElementById('galleryGrid');
+                const emptyState = document.getElementById('emptyState');
+                
+                if (this.data.images.length === 0) {
+                    grid.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+                
+                emptyState.classList.add('hidden');
+                grid.innerHTML = this.data.images.map((img, index) => this.createCardHTML(img, index)).join('');
+                
+                this.setupDragAndDrop();
+                this.setupCardFileDrop();
+            }
+
+            createCardHTML(img, index) {
+                const isExternal = img.url.startsWith('http');
+                const dateStr = img.date || '无日期';
+                const hasUrl = img.url && img.url.trim() !== '';
+                
+                const tagsHtml = img.tags && img.tags.length > 0 
+                    ? img.tags.slice(0, 3).map(tag => `<span class="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-300 rounded-full">${tag}</span>`).join('') 
+                    : '';
+                const moreTags = img.tags && img.tags.length > 3 ? `<span class="text-[10px] px-2 py-0.5 bg-slate-700/50 text-slate-300 rounded-full">+${img.tags.length - 3}</span>` : '';
+
+                return `
+                    <div class="image-card glass rounded-xl overflow-hidden border ${hasUrl ? 'border-slate-700/50' : 'border-red-500/30'} cursor-move group relative" 
+                         draggable="true" 
+                         data-id="${img.id}" 
+                         data-index="${index}"
+                         onclick="if(!event.target.closest('button')) app.openEdit(${img.id})">
+                        
+                        <div class="aspect-[4/3] bg-slate-800 relative overflow-hidden">
+                            ${hasUrl ? `
+                                <img src="${img.url}" 
+                                     alt="${img.title}" 
+                                     class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                     onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%231e293b%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%2364748b%22 font-family=%22sans-serif%22 font-size=%2220%22 dy=%2210.5%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E无法加载%3C/text%3E%3C/svg%3E'">
+                            ` : `
+                                <div class="w-full h-full flex items-center justify-center bg-slate-800">
+                                    <div class="text-center">
+                                        <svg class="w-12 h-12 mx-auto mb-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                        <span class="text-xs text-slate-500">暂无图片</span>
+                                    </div>
+                                </div>
+                            `}
+                            
+                            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-60"></div>
+                            
+                            <div class="absolute top-2 right-2 flex gap-1">
+                                ${!hasUrl ? '<span class="text-[10px] px-2 py-1 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/30">空项</span>' : ''}
+                                <span class="text-[10px] px-2 py-1 rounded-full font-medium ${isExternal ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'}">
+                                    ${isExternal ? '外部' : '本地'}
+                                </span>
+                            </div>
+
+                            <div class="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span class="text-xs text-white/80 font-mono bg-black/50 px-2 py-1 rounded">#${index + 1}</span>
+                            </div>
+                        </div>
+
+                        <div class="p-4">
+                            <h3 class="font-semibold text-white mb-1 truncate group-hover:text-blue-400 transition-colors ${!hasUrl ? 'text-slate-500' : ''}">${img.title}</h3>
+                            <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+                                <span class="flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+                                    ${img.category}
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    ${dateStr}
+                                </span>
+                            </div>
+                            
+                            <!-- 显示路径 -->
+                            <div class="mb-2 path-text text-slate-500 truncate" title="${img.url}">
+                                ${img.url ? (img.url.length > 30 ? img.url.substring(0, 30) + '...' : img.url) : '无路径'}
+                            </div>
+                            
+                            <div class="flex flex-wrap gap-1">
+                                ${tagsHtml}
+                                ${moreTags}
+                            </div>
+                        </div>
+
+                        <div class="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                    </div>
+                `;
+            }
+
+            setupDragAndDrop() {
+                const cards = document.querySelectorAll('.image-card');
+                
+                cards.forEach(card => {
+                    card.addEventListener('dragstart', (e) => {
+                        this.draggedItem = card;
+                        card.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+
+                    card.addEventListener('dragend', () => {
+                        card.classList.remove('dragging');
+                        cards.forEach(c => c.classList.remove('drag-over'));
+                        this.draggedItem = null;
+                    });
+
+                    card.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        if (!e.dataTransfer.types.includes('Files')) {
+                            e.dataTransfer.dropEffect = 'move';
+                            if (card !== this.draggedItem) card.classList.add('drag-over');
+                        }
+                    });
+
+                    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+
+                    card.addEventListener('drop', (e) => {
+                        if (e.dataTransfer.types.includes('Files')) return;
+                        e.preventDefault();
+                        card.classList.remove('drag-over');
+                        
+                        if (this.draggedItem && this.draggedItem !== card) {
+                            const fromIndex = parseInt(this.draggedItem.dataset.index);
+                            const toIndex = parseInt(card.dataset.index);
+                            const item = this.data.images.splice(fromIndex, 1)[0];
+                            this.data.images.splice(toIndex, 0, item);
+                            this.renderGallery();
+                            this.showToast('排序已更新', 'success');
+                        }
+                    });
+                });
+            }
+
+            handleSort() {
+                const sortType = document.getElementById('sortSelect').value;
+                switch(sortType) {
+                    case 'date-desc': this.data.images.sort((a, b) => new Date(b.date) - new Date(a.date)); break;
+                    case 'date-asc': this.data.images.sort((a, b) => new Date(a.date) - new Date(b.date)); break;
+                    case 'title': this.data.images.sort((a, b) => a.title.localeCompare(b.title)); break;
+                    case 'category': this.data.images.sort((a, b) => a.category.localeCompare(b.category)); break;
+                }
+                this.renderGallery();
+                if (sortType !== 'custom') this.showToast('已按选择的方式排序', 'success');
+            }
+
+            openEdit(id) {
+                const img = this.data.images.find(i => i.id === id);
+                if (!img) return;
+                this.currentEditId = id;
+                
+                document.getElementById('editPreview').src = img.url || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22300%22%3E%3Crect fill=%22%231e293b%22 width=%22400%22 height=%22300%22/%3E%3Ctext fill=%22%2364748b%22 font-family=%22sans-serif%22 font-size=%2220%22 dy=%2210.5%22 font-weight=%22bold%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22%3E无图片%3C/text%3E%3C/svg%3E';
+                document.getElementById('editTitle').value = img.title;
+                document.getElementById('editCategory').value = img.category;
+                document.getElementById('editDate').value = this.formatDateForInput(img.date);
+                document.getElementById('editDescription').value = img.description || '';
+                document.getElementById('editUrl').value = img.url;
+                document.getElementById('editWidth').value = img.width || 0;
+                document.getElementById('editHeight').value = img.height || 0;
+                this.renderEditTags(img.tags || []);
+                
+                document.getElementById('editPanel').classList.remove('translate-x-full');
+                document.getElementById('overlay').classList.remove('hidden');
+                setTimeout(() => document.getElementById('overlay').classList.remove('opacity-0'), 10);
+            }
+
+            closeEdit() {
+                document.getElementById('editPanel').classList.add('translate-x-full');
+                document.getElementById('overlay').classList.add('opacity-0');
+                setTimeout(() => document.getElementById('overlay').classList.add('hidden'), 300);
+                this.currentEditId = null;
+            }
+
+            renderEditTags(tags) {
+                const container = document.getElementById('editTags');
+                if (!tags || tags.length === 0) {
+                    container.innerHTML = '<span class="text-slate-500 text-sm italic">暂无标签</span>';
+                    return;
+                }
+                container.innerHTML = tags.map((tag, idx) => `
+                    <span class="tag px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs flex items-center gap-1">
+                        ${tag}
+                        <button onclick="app.removeTag(${idx})" class="hover:text-red-400 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </span>
+                `).join('');
+            }
+
+            addTag() {
+                const input = document.getElementById('newTag');
+                const value = input.value.trim();
+                if (!value) return;
+                const img = this.data.images.find(i => i.id === this.currentEditId);
+                if (!img.tags) img.tags = [];
+                if (!img.tags.includes(value)) {
+                    img.tags.push(value);
+                    this.renderEditTags(img.tags);
+                    input.value = '';
+                }
+            }
+
+            removeTag(index) {
+                const img = this.data.images.find(i => i.id === this.currentEditId);
+                if (img && img.tags) {
+                    img.tags.splice(index, 1);
+                    this.renderEditTags(img.tags);
+                }
+            }
+
+            saveEdit() {
+                const img = this.data.images.find(i => i.id === this.currentEditId);
+                if (!img) return;
+                img.title = document.getElementById('editTitle').value;
+                img.category = document.getElementById('editCategory').value;
+                img.date = this.formatDateFromInput(document.getElementById('editDate').value);
+                img.description = document.getElementById('editDescription').value;
+                img.url = document.getElementById('editUrl').value;
+                img.width = parseInt(document.getElementById('editWidth').value) || 0;
+                img.height = parseInt(document.getElementById('editHeight').value) || 0;
+                this.renderGallery();
+                this.updateStats();
+                this.closeEdit();
+                this.showToast('保存成功', 'success');
+            }
+
+            deleteImage() {
+                if (!confirm('确定要删除这张图片吗？')) return;
+                const index = this.data.images.findIndex(i => i.id === this.currentEditId);
+                if (index > -1) {
+                    this.data.images.splice(index, 1);
+                    this.renderGallery();
+                    this.updateStats();
+                    this.closeEdit();
+                    this.showToast('已删除', 'success');
+                }
+            }
+
+            formatDateForInput(dateStr) {
+                if (!dateStr) return '';
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    return `${parts[0].padStart(4, '0')}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                }
+                return dateStr;
+            }
+
+            formatDateFromInput(dateStr) {
+                if (!dateStr) return '';
+                const d = new Date(dateStr);
+                return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+            }
+
+            exportJSON() {
+                const output = { ...this.data, totalImages: this.data.images.length, lastModified: new Date().toISOString() };
+                navigator.clipboard.writeText(JSON.stringify(output, null, 2)).then(() => {
+                    this.showToast('JSON已复制到剪贴板', 'success');
+                });
+            }
+
+            downloadJSON() {
+                const output = { ...this.data, totalImages: this.data.images.length, lastModified: new Date().toISOString() };
+                const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'images.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('文件已下载', 'success');
+            }
+
+            showToast(message, type = 'info') {
+                const toast = document.getElementById('toast');
+                document.getElementById('toastMessage').textContent = message;
+                document.getElementById('toastIcon').innerHTML = {
+                    success: '<svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>',
+                    error: '<svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>',
+                    info: '<svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+                }[type] || '';
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+            }
+        }
+
+        const app = new GalleryEditor();
+    </script>
+</body>
+</html>
